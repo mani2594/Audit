@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import ValidationSchema from "./ValidationSchema";
 import { useDispatch } from "react-redux";
 import { AddAudit } from "../Redux/Reducers/createSlice";
-
+import { useNavigate } from "react-router-dom";
 interface IncidentProps { }
 
 export interface Audit {
@@ -36,6 +36,7 @@ export interface Audit {
 }
 
 const Incident: FC<IncidentProps> = () => {
+  const history = useNavigate();
   const { Formik } = formik;
   const [values, setValues] = useState<Audit>({        
     incidentNumber: "",
@@ -72,8 +73,9 @@ const dispatch = useDispatch()
     });    
   };
 
-  const handleSubmit = () => {debugger
+  const handleSubmit = () => {
     dispatch(AddAudit(values));
+    history("/home");
   }
 
   return (
