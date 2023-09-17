@@ -72,10 +72,10 @@ const Incident: FC<IncidentProps> = () => {
    rootCause:"",
    correction :"",
    correctionAction: "",
-   corrCompletionDate : format(new Date(), "yyyy-MM-dd"),
+   corrCompletionDate : "",
    verificationAccepted: "",
-   ncrClosedDate: format(new Date(), "yyyy-MM-dd"),
-   followUp: format(new Date(), "yyyy-MM-dd")
+   ncrClosedDate: "",
+   followUp: ""
 });
 
   const handleChange = (event:any) => {
