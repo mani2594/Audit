@@ -1,4 +1,4 @@
-import React, { FC, useState } from "react";
+import React, { FC, useEffect, useState } from "react";
 import Button from "react-bootstrap/esm/Button";
 import Col from "react-bootstrap/esm/Col";
 import Form from "react-bootstrap/esm/Form";
@@ -8,16 +8,17 @@ import * as formik from "formik";
 import Container from "react-bootstrap/esm/Container";
 import { format } from "date-fns";
 import ValidationSchema from "./ValidationSchema";
-import { useDispatch } from "react-redux";
-import { AddAudit } from "../Redux/Reducers/createSlice";
-import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { TicketApi } from "../../Services/TicketApi";
+import { Spinner } from "react-bootstrap";
+import { CounterState } from "../Redux/Reducers/createSlice";
 interface IncidentProps { }
 
 export interface Audit {
   incidentNumber:string;
-  caller: string;
-  assign:string;
-  created:string;
+  auditor: string;
+  assign:string;  
   function:string;
   area:string;
   site:string;
@@ -36,13 +37,30 @@ export interface Audit {
 }
 
 const Incident: FC<IncidentProps> = () => {
+  const username = useSelector((state:CounterState) => state.username);
+  const { ticketNumber } = useParams<{ ticketNumber: string}>();
   const history = useNavigate();
-  const { Formik } = formik;
-  const [values, setValues] = useState<Audit>({        
-    incidentNumber: "",
-    caller: "",
-   assign: "",
-   created: "",
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { Formik } = formik;  
+  const location = useLocation();
+  function fetchData(ticketNumber: string| undefined) {      
+    if(ticketNumber){
+      const allIncident : Audit[] =location.state.incident;  
+      const incident = allIncident.find(x=> x.incidentNumber == ticketNumber)
+      if(incident){
+        setValues(incident);
+        console.log(incident);
+      }
+    }
+  }
+  useEffect(()=>{
+    fetchData(ticketNumber);
+  },[ticketNumber])
+  const [values, setValues] = useState<Audit>({  
+    incidentNumber :"",          
+    auditor: username,
+   assign: "",   
    function: "",
    area: "",
    site: "",
@@ -59,8 +77,6 @@ const Incident: FC<IncidentProps> = () => {
    ncrClosedDate: format(new Date(), "yyyy-MM-dd"),
    followUp: format(new Date(), "yyyy-MM-dd")
 });
-const dispatch = useDispatch()
-
 
   const handleChange = (event:any) => {
     // Extract the name and value from the input field.
@@ -73,13 +89,60 @@ const dispatch = useDispatch()
     });    
   };
 
-  const handleSubmit = () => {
-    dispatch(AddAudit(values));
-    history("/home");
+  const handleSubmit = async () => {
+    try{debugger
+      setIsLoading(true);
+      if(ticketNumber){
+        await TicketApi.EditAudit(values);    
+      }else{        
+        await TicketApi.createAudit(values);            
+      }
+    }
+    catch (error) {
+      setError("Failed to add ticket!");      
+    }
+    finally{
+      setIsLoading(false);
+      history("/home");
+    }
   }
+  const nonConformityDropdown = [
+    { value: 'critical', label: 'Critical' },
+    { value: 'major', label: 'Major' },
+    { value: 'minor', label: 'Minor' },
+  ];
+  const ncrStatusDropdown=[
+    {value:'Created',label:'Created'},
+    {value:'Submitted(pending effectiveness evaluation)',label:'Submitted(pending effectiveness evaluation)'},
 
+    {value:'Closed',label:'Closed'},    
+  ];
+  const siteDropdown=[
+    {value:'IPPL - KK',label:'IPPL - KK'},
+    {value:'IPPL - WLR',label:'IPPL - WLR'},
+    {value:'IPPL - GJ',label:'IPPL - GJ'}, 
+  ];
+  const functionDropdown=[
+    {value:'Procurement',label:'Procurement'},
+    {value:'Supply chain - QA',label:'Supply chain - QA'},
+    {value:'Production - Bulk',label:'Production - Bulk'},
+    {value:'Production - Retail',label:'Production - Retail'}, 
+    {value:'Quality',label:'Quality'},
+    {value:'Maintenance',label:'Maintenance'},  
+  ];  
+ 
+  const redTextStyle = {
+    color: 'red',
+  };
   return (
     <Container fluid>
+      {error!=null && <h1 style={{color: "red"}}>{error}</h1>}
+      {isLoading ? (
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+      ) : (
+      
       <Row className="mb-3">
         <Formik
           validationSchema={ValidationSchema}
@@ -90,34 +153,6 @@ const dispatch = useDispatch()
             <>
               <Col lg={6}>
                 <Form noValidate >
-
-                  <Form.Group
-                    as={Col}
-                    className="mt-2"
-                    controlId="validationFormikIncidentNumber"
-                  >
-                    <Row className="align-items-center">
-                      <Col xs="auto" md={4}>
-                        <Form.Label>Incident Number</Form.Label>
-                      </Col>
-                      <Col md={8}>
-                        <InputGroup hasValidation>
-                          <Form.Control
-                            type="text"
-                            name="incidentNumber"                            
-                            onChange={handleChange}                          
-                            isValid={
-                              touched.incidentNumber && !errors.incidentNumber
-                            }                            
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {errors.incidentNumber}
-                          </Form.Control.Feedback>
-                        </InputGroup>
-                      </Col>
-                    </Row>
-                  </Form.Group>
-
                   <Form.Group className="mt-2" as={Col} controlId="validationFormikCaller">
                     <Row className="align-items-center">
                       <Col xs="auto" md={4}>
@@ -128,13 +163,9 @@ const dispatch = useDispatch()
                           <Form.Control
                             type="text"
                             name="caller"
-                            required                            
-                            onChange={handleChange}
-                            isValid={touched.caller && !errors.caller}                            
+                            readOnly                            
+                            value={values.auditor}                                                
                           />
-                          <Form.Control.Feedback type="invalid">
-                            {errors.caller}
-                          </Form.Control.Feedback>
                         </InputGroup>
                       </Col>
                     </Row>
@@ -150,7 +181,8 @@ const dispatch = useDispatch()
                           <Form.Control
                             type="text"
                             name="assign"                            
-                            onChange={handleChange}                            
+                            onChange={handleChange}    
+                            value={values.assign}                        
                           />
                           <Form.Control.Feedback type="invalid">
                             {errors.assign}
@@ -159,26 +191,28 @@ const dispatch = useDispatch()
                       </Col>
                     </Row>
                   </Form.Group>
-                  <Form.Group className="mt-2" as={Col} controlId="validationFormikCreated">
-                    <Row className="align-items-center">
-                      <Col xs="auto" md={4}>
-                        <Form.Label>Created</Form.Label>
-                      </Col>
-                      <Col md={8}>
-                        <InputGroup hasValidation>
-                          <Form.Control
-                            type="text"
-                            name="created"                         
-                            onChange={handleChange}
-                            isValid={touched.created && !errors.created}                            
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {errors.created}
-                          </Form.Control.Feedback>
-                        </InputGroup>
-                      </Col>
-                    </Row>
-                  </Form.Group>
+                  <Form.Group className="mt-2" as={Col} controlId="validationFormikNCRCreationDate">
+                  <Row className="align-items-center">
+                    <Col xs="auto" md={4}>
+                      <Form.Label>NCR Creation Date</Form.Label>
+                    </Col>
+                    <Col md={8}>
+                      <InputGroup hasValidation>
+                        <Form.Control
+                          type="date"
+                          name="ncrCreationDate"
+                          required                          
+                          onChange={handleChange}
+                          value={values.ncrCreationDate}           
+                          isValid={touched.ncrCreationDate && !errors.ncrCreationDate}                          
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {errors.ncrCreationDate}
+                        </Form.Control.Feedback>
+                      </InputGroup>
+                    </Col>
+                  </Row>
+                </Form.Group>
                   <Form.Group className="mt-2" as={Col} controlId="validationFormikFunction">
                     <Row className="align-items-center">
                       <Col xs="auto" md={4}>
@@ -186,13 +220,21 @@ const dispatch = useDispatch()
                       </Col>
                       <Col md={8}>
                         <InputGroup hasValidation>
-                          <Form.Control
-                            type="text"
-                            name="function"                            
-                            onChange={handleChange}                            
-                          />
+                          <Form.Select
+                            name="function"
+                            required
+                            onChange={handleChange}
+                            value={values.function}
+                            isValid={values.function !== ''}
+                          >                          
+                            {functionDropdown.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </Form.Select>
                           <Form.Control.Feedback type="invalid">
-                            {errors.function}
+                            Please select an option.
                           </Form.Control.Feedback>
                         </InputGroup>
                       </Col>
@@ -205,13 +247,21 @@ const dispatch = useDispatch()
                       </Col>
                       <Col md={8}>
                         <InputGroup hasValidation>
-                          <Form.Control
-                            type="text"
-                            name="site"                            
-                            onChange={handleChange}                            
-                          />
+                          <Form.Select
+                            name="site"
+                            required
+                            onChange={handleChange}
+                            value={values.site}
+                            isValid={values.site !== ''}
+                          >                          
+                            {siteDropdown.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </Form.Select>
                           <Form.Control.Feedback type="invalid">
-                            {errors.site}
+                            Please select an option.
                           </Form.Control.Feedback>
                         </InputGroup>
                       </Col>
@@ -234,7 +284,8 @@ const dispatch = useDispatch()
                           <Form.Control
                             type="text"
                             name="area"                            
-                            onChange={handleChange}                            
+                            onChange={handleChange}   
+                            value={values.area}                                    
                           />
 
                           <Form.Control.Feedback type="invalid">
@@ -252,19 +303,26 @@ const dispatch = useDispatch()
                       <Form.Label>Non-conformity type</Form.Label>
                     </Col>
                     <Col md={8}>
-                      <InputGroup hasValidation>
-                        <Form.Control
-                          type="text"
-                          name="nonConformity"
-                          required                          
-                          onChange={handleChange}
-                          isValid={touched.nonConformity && !errors.nonConformity}                          
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {errors.nonConformity}
-                        </Form.Control.Feedback>
-                      </InputGroup>
-                    </Col>
+                        <InputGroup hasValidation>
+                          <Form.Select
+                            name="nonConformity"
+                            required
+                            onChange={handleChange}
+                            value={values.nonConformity}
+                            isValid={values.nonConformity !== ''}
+                          >                            
+                            {nonConformityDropdown.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          <Form.Control.Feedback type="invalid">
+                            Please select an option.
+                          </Form.Control.Feedback>
+                        </InputGroup>
+                      </Col>
+
                   </Row>
                 </Form.Group>
                 <Form.Group className="mt-2" as={Col} controlId="validationFormikDescriptionNonConformity">
@@ -279,31 +337,11 @@ const dispatch = useDispatch()
                           name="descNonConformity"
                           required                          
                           onChange={handleChange}
+                          value={values.descNonConformity}           
                           isValid={touched.descNonConformity && !errors.descNonConformity}                          
                         />
                         <Form.Control.Feedback type="invalid">
                           {errors.descNonConformity}
-                        </Form.Control.Feedback>
-                      </InputGroup>
-                    </Col>
-                  </Row>
-                </Form.Group>
-                <Form.Group className="mt-2" as={Col} controlId="validationFormikNCRCreationDate">
-                  <Row className="align-items-center">
-                    <Col xs="auto" md={4}>
-                      <Form.Label>NCR Creation Date</Form.Label>
-                    </Col>
-                    <Col md={8}>
-                      <InputGroup hasValidation>
-                        <Form.Control
-                          type="date"
-                          name="ncrCreationDate"
-                          required                          
-                          onChange={handleChange}
-                          isValid={touched.ncrCreationDate && !errors.ncrCreationDate}                          
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {errors.ncrCreationDate}
                         </Form.Control.Feedback>
                       </InputGroup>
                     </Col>
@@ -315,19 +353,25 @@ const dispatch = useDispatch()
                       <Form.Label>NCR Status</Form.Label>
                     </Col>
                     <Col md={8}>
-                      <InputGroup hasValidation>
-                        <Form.Control
-                          type="text"
-                          name="ncrStatus"
-                          required                          
-                          onChange={handleChange}
-                          isValid={touched.ncrStatus && !errors.ncrStatus}                          
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {errors.ncrStatus}
-                        </Form.Control.Feedback>
-                      </InputGroup>
-                    </Col>
+                        <InputGroup hasValidation>
+                          <Form.Select
+                            name="ncrStatus"
+                            required
+                            onChange={handleChange}
+                            value={values.ncrStatus}
+                            isValid={values.ncrStatus !== ''}
+                          >                            
+                            {ncrStatusDropdown.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          <Form.Control.Feedback type="invalid">
+                            Please select an option.
+                          </Form.Control.Feedback>
+                        </InputGroup>
+                      </Col>
                   </Row>
                 </Form.Group>                             
               </Col>
@@ -345,7 +389,8 @@ const dispatch = useDispatch()
                           required                          
                           onChange={handleChange}
                           isValid={touched.rootCause && !errors.rootCause}    
-                          isInvalid={!!errors.rootCause}                          
+                          isInvalid={!!errors.rootCause}   
+                          value={values.rootCause}                                  
                         />
                         <Form.Control.Feedback type="invalid">
                           {errors.rootCause}
@@ -368,6 +413,7 @@ const dispatch = useDispatch()
                           name="correction"
                           required                          
                           onChange={handleChange}
+                          value={values.correction}           
                           isValid={touched.correction && !errors.correction}                        
                         />
                         <Form.Control.Feedback type="invalid">
@@ -391,6 +437,7 @@ const dispatch = useDispatch()
                           name="correctionAction"
                           required                         
                           onChange={handleChange}
+                          value={values.correctionAction}           
                           isValid={touched.correctionAction && !errors.correctionAction}                          
                         />
                         <Form.Control.Feedback type="invalid">
@@ -414,6 +461,7 @@ const dispatch = useDispatch()
                           name="corrCompletionDate"
                           required
                           onChange={handleChange}
+                          value={values.corrCompletionDate}           
                           isValid={touched.corrCompletionDate && !errors.corrCompletionDate}                          
                         />
                         <Form.Control.Feedback type="invalid">
@@ -437,6 +485,7 @@ const dispatch = useDispatch()
                           name="ncrCreationDate"
                           required                        
                           onChange={handleChange}
+                          value={values.ncrCreationDate}           
                           isValid={touched.ncrCreationDate && !errors.ncrCreationDate}                          
                         />
                         <Form.Control.Feedback type="invalid">
@@ -460,6 +509,7 @@ const dispatch = useDispatch()
                           name="verificationAccepted"
                           required                          
                           onChange={handleChange}
+                          value={values.verificationAccepted}           
                           isValid={touched.verificationAccepted && !errors.verificationAccepted}                          
                         />
                         <Form.Control.Feedback type="invalid">
@@ -483,6 +533,7 @@ const dispatch = useDispatch()
                           name="ncrClosedDate"
                           required                          
                           onChange={handleChange}
+                          value={values.ncrClosedDate}           
                           isValid={touched.ncrClosedDate && !errors.ncrClosedDate}                          
                         />
                         <Form.Control.Feedback type="invalid">
@@ -506,6 +557,7 @@ const dispatch = useDispatch()
                           name="followUp"
                           required                          
                           onChange={handleChange}
+                          value={values.followUp}           
                           isValid={touched.followUp && !errors.followUp}                         
                         />
                         <Form.Control.Feedback type="invalid">
@@ -529,6 +581,7 @@ const dispatch = useDispatch()
                           name="ncrClosedBy"
                           required                          
                           onChange={handleChange}
+                          value={values.ncrClosedBy}           
                           isValid={touched.ncrClosedBy && !errors.ncrClosedBy}                      
                         />
                         <Form.Control.Feedback type="invalid">
@@ -547,6 +600,7 @@ const dispatch = useDispatch()
           )}
         </Formik>
       </Row>
+      )}
     </Container>
   );
 };
